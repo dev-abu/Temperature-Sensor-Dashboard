@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Smart Building Climate Monitor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f0f2f5;
+      color: #333;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 30px;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    h2 {
+      text-align: center;
+      font-size: 28px;
+      color: #2c3e50;
+    }
+
+    .description {
+      text-align: center;
+      font-size: 14px;
+      color: #777;
+      margin-bottom: 30px;
+    }
+
+    .sensor-stats {
+      display: flex;
+      justify-content: space-around;
+      font-size: 42px;
+      font-weight: bold;
+      color: #16a085;
+      margin-bottom: 10px;
+    }
+
+    .status {
+      text-align: center;
+      font-size: 18px;
+      margin-top: 10px;
+      font-weight: 600;
+      color: #2d3436;
+    }
+
+    .alerts {
+      margin-top: 20px;
+      padding: 16px;
+      border-left: 5px solid #e74c3c;
+      background-color: #fdecea;
+      color: #c0392b;
+      font-size: 16px;
+      display: none;
+      border-radius: 8px;
+    }
+
+    canvas {
+      margin-top: 30px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Smart Building Climate Monitor</h2>
+    <p class="description">Live data from Thermistor + Humidity via Arduino Uno</p>
+
+    <div class="sensor-stats">
+      <div id="tempDisplay">-- °C</div>
+      <div id="humidityDisplay">-- %</div>
+    </div>
+    <div class="status" id="status">Awaiting sensor data...</div>
+    <div class="alerts" id="alertBox"></div>
+
+    <canvas id="sensorChart" height="100"></canvas>
+
+    <!-- 🔔 ALERT SOUND -->
+    <audio id="alertSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
+  </div>
+
+  <script>
+    let labels = [], tempData = [], humidityData = [];
+
+    const ctx = document.getElementById('sensorChart').getContext('2d');
+    const sensorChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Temperature (°C)',
+            data: tempData,
+            borderColor: 'rgba(231, 76, 60, 1)',
+            backgroundColor: 'rgba(231, 76, 60, 0.15)',
+            tension: 0.3,
+          },
+          {
+            label: 'Humidity (%)',
+            data: humidityData,
+            borderColor: 'rgba(52, 152, 219, 1)',
+            backgroundColor: 'rgba(52, 152, 219, 0.15)',
+            tension: 0.3,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: {
+            ticks: { maxRotation: 90, minRotation: 45 }
+          },
+          y: {
+            beginAtZero: true,
+            suggestedMax: 100
+          }
+        }
+      }
+    });
+
+    const alertAudio = document.getElementById("alertSound");
+
+    function updateDashboard(temp, humidity) {
+      const timestamp = new Date().toLocaleTimeString();
+      document.getElementById('tempDisplay').textContent = `${temp.toFixed(1)} °C`;
+      document.getElementById('humidityDisplay').textContent = `${humidity.toFixed(1)} %`;
+
+      let status = '';
+      let alerts = [];
+      let shouldPlaySound = false;
+
+      if (temp < 21) {
+        status = '❄️ Heating ON';
+        alerts.push('Temperature too low — heating may be required.');
+        shouldPlaySound = true;
+      } else if (temp > 24) {
+        status = '🔥 Cooling ON';
+        alerts.push('High temperature — check AC or ventilation.');
+        shouldPlaySound = true;
+      } else {
+        status = '✅ Climate Optimal';
+      }
+
+      if (humidity < 40) {
+        alerts.push('Humidity low — may cause dryness.');
+        shouldPlaySound = true;
+      } else if (humidity > 60) {
+        alerts.push('Humidity high — potential discomfort.');
+        shouldPlaySound = true;
+      }
+
+      document.getElementById('status').textContent = status;
+
+      const alertBox = document.getElementById('alertBox');
+      if (alerts.length > 0) {
+        alertBox.style.display = 'block';
+        alertBox.innerHTML = alerts.map(msg => `• ${msg}`).join('<br>');
+        if (shouldPlaySound) alertAudio.play();
+      } else {
+        alertBox.style.display = 'none';
+      }
+
+      labels.push(timestamp);
+      tempData.push(temp);
+      humidityData.push(humidity);
+
+      if (labels.length > 20) {
+        labels.shift();
+        tempData.shift();
+        humidityData.shift();
+      }
+
+      sensorChart.update();
+    }
+
+    setInterval(() => {
+      fetch("http://localhost:5000/sensor")
+        .then(res => res.json())
+        .then(data => {
+          if (data.temperature && data.humidity) {
+            updateDashboard(data.temperature, data.humidity);
+          }
+        })
+        .catch(err => {
+          console.log("Waiting for data...");
+        });
+    }, 2000);
+  </script>
+</body>
+</html>
