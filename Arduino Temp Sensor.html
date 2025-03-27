@@ -1,198 +1,205 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Smart Building Climate Monitor</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: #f0f2f5;
-      color: #333;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Building Climate Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #fff5f8;
+            margin: 0;
+            padding: 0;
+            text-align: center;
+        }
 
-    .container {
-      max-width: 900px;
-      margin: 40px auto;
-      padding: 30px;
-      background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
+        header {
+            background: #ff6f91;
+            color: white;
+            padding: 1rem;
+        }
 
-    h2 {
-      text-align: center;
-      font-size: 28px;
-      color: #2c3e50;
-    }
+        header h1 {
+            margin: 0.2rem 0;
+            font-size: 2rem;
+        }
 
-    .description {
-      text-align: center;
-      font-size: 14px;
-      color: #777;
-      margin-bottom: 30px;
-    }
+        header p {
+            margin: 0;
+            font-size: 1rem;
+        }
 
-    .sensor-stats {
-      display: flex;
-      justify-content: space-around;
-      font-size: 42px;
-      font-weight: bold;
-      color: #16a085;
-      margin-bottom: 10px;
-    }
+        .container {
+            margin: 2rem auto;
+            max-width: 900px;
+        }
 
-    .status {
-      text-align: center;
-      font-size: 18px;
-      margin-top: 10px;
-      font-weight: 600;
-      color: #2d3436;
-    }
+        .card {
+            background: #fff0f5;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
 
-    .alerts {
-      margin-top: 20px;
-      padding: 16px;
-      border-left: 5px solid #e74c3c;
-      background-color: #fdecea;
-      color: #c0392b;
-      font-size: 16px;
-      display: none;
-      border-radius: 8px;
-    }
+        .reading {
+            font-size: 2rem;
+            margin: 0.5rem 0;
+            color: #ff4081;
+        }
 
-    canvas {
-      margin-top: 30px;
-    }
-  </style>
+        #status {
+            font-size: 1.2rem;
+            margin-top: 1rem;
+            color: #e91e63;
+        }
+
+        #alertBox {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #ffe0e0;
+            color: #d32f2f;
+            display: none;
+            border-radius: 8px;
+        }
+
+        canvas {
+            max-width: 100%;
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <h2>Smart Building Climate Monitor</h2>
-    <p class="description">Live data from Thermistor + Humidity via Arduino Uno</p>
+    <header>
+        <h1>Smart Building Climate Monitor</h1>
+        <p>Live monitoring with real time data</p>
+    </header>
 
-    <div class="sensor-stats">
-      <div id="tempDisplay">-- °C</div>
-      <div id="humidityDisplay">-- %</div>
+    <div class="container">
+        <div class="card">
+            <h2>Current Readings</h2>
+            <p>Temperature: <span class="reading" id="tempReading">-- °C</span></p>
+            <p>Humidity: <span class="reading" id="humidityReading">-- %</span></p>
+            <div id="status"></div>
+            <div id="alertBox"></div>
+        </div>
+
+        <div class="card">
+            <h2>Live Climate Chart</h2>
+            <canvas id="climateChart"></canvas>
+        </div>
     </div>
-    <div class="status" id="status">Awaiting sensor data...</div>
-    <div class="alerts" id="alertBox"></div>
 
-    <canvas id="sensorChart" height="100"></canvas>
+    <audio id="alertAudio" src="https://www.soundjay.com/buttons/sounds/beep-07.mp3"></audio>
 
-    <!-- 🔔 ALERT SOUND -->
-    <audio id="alertSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
-  </div>
+    <script>
+        const climateData = {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Temperature (°C)',
+                    borderColor: '#ff6f91',
+                    data: [],
+                    fill: false,
+                    tension: 0.1
+                },
+                {
+                    label: 'Humidity (%)',
+                    borderColor: '#f9a825',
+                    data: [],
+                    fill: false,
+                    tension: 0.1
+                }
+            ]
+        };
 
-  <script>
-    let labels = [], tempData = [], humidityData = [];
+        const climateChart = new Chart(
+            document.getElementById('climateChart'),
+            {
+                type: 'line',
+                data: climateData,
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Value'
+                            }
+                        }
+                    }
+                }
+            }
+        );
 
-    const ctx = document.getElementById('sensorChart').getContext('2d');
-    const sensorChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            label: 'Temperature (°C)',
-            data: tempData,
-            borderColor: 'rgba(231, 76, 60, 1)',
-            backgroundColor: 'rgba(231, 76, 60, 0.15)',
-            tension: 0.3,
-          },
-          {
-            label: 'Humidity (%)',
-            data: humidityData,
-            borderColor: 'rgba(52, 152, 219, 1)',
-            backgroundColor: 'rgba(52, 152, 219, 0.15)',
-            tension: 0.3,
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        scales: {
-          x: {
-            ticks: { maxRotation: 90, minRotation: 45 }
-          },
-          y: {
-            beginAtZero: true,
-            suggestedMax: 100
-          }
+        function updateCharts(temp, humidity) {
+            const now = new Date().toLocaleTimeString();
+
+            if (climateData.labels.length > 20) {
+                climateData.labels.shift();
+                climateData.datasets[0].data.shift();
+                climateData.datasets[1].data.shift();
+            }
+
+            climateData.labels.push(now);
+            climateData.datasets[0].data.push(temp);
+            climateData.datasets[1].data.push(humidity);
+
+            climateChart.update();
         }
-      }
-    });
 
-    const alertAudio = document.getElementById("alertSound");
+        setInterval(() => {
+            const temp = (20 + Math.random() * 5).toFixed(1);
+            const humidity = (40 + Math.random() * 25).toFixed(1);
 
-    function updateDashboard(temp, humidity) {
-      const timestamp = new Date().toLocaleTimeString();
-      document.getElementById('tempDisplay').textContent = `${temp.toFixed(1)} °C`;
-      document.getElementById('humidityDisplay').textContent = `${humidity.toFixed(1)} %`;
+            document.getElementById('tempReading').textContent = `${temp} °C`;
+            document.getElementById('humidityReading').textContent = `${humidity} %`;
 
-      let status = '';
-      let alerts = [];
-      let shouldPlaySound = false;
+            updateCharts(parseFloat(temp), parseFloat(humidity));
 
-      if (temp < 21) {
-        status = '❄️ Heating ON';
-        alerts.push('Temperature too low — heating may be required.');
-        shouldPlaySound = true;
-      } else if (temp > 24) {
-        status = '🔥 Cooling ON';
-        alerts.push('High temperature — check AC or ventilation.');
-        shouldPlaySound = true;
-      } else {
-        status = '✅ Climate Optimal';
-      }
+            let status = '';
+            let alerts = [];
+            let shouldPlaySound = false;
 
-      if (humidity < 40) {
-        alerts.push('Humidity low — may cause dryness.');
-        shouldPlaySound = true;
-      } else if (humidity > 60) {
-        alerts.push('Humidity high — potential discomfort.');
-        shouldPlaySound = true;
-      }
+            if (temp < 18) {
+                status = '❄️ Turn Heating ON';
+                alerts.push('Temperature too low — heating may be required.');
+                shouldPlaySound = true;
+            } else if (temp > 24) {
+                status = '🔥 Turn Cooling ON';
+                alerts.push('High temperature — check AC or ventilation.');
+                shouldPlaySound = true;
+            } else {
+                status = '✅ Lovely Climate';
+            }
 
-      document.getElementById('status').textContent = status;
+            if (humidity < 40) {
+                alerts.push('Humidity low — may cause dryness.');
+                shouldPlaySound = true;
+            } else if (humidity > 60) {
+                alerts.push('Humidity high — potential discomfort.');
+                shouldPlaySound = true;
+            }
 
-      const alertBox = document.getElementById('alertBox');
-      if (alerts.length > 0) {
-        alertBox.style.display = 'block';
-        alertBox.innerHTML = alerts.map(msg => `• ${msg}`).join('<br>');
-        if (shouldPlaySound) alertAudio.play();
-      } else {
-        alertBox.style.display = 'none';
-      }
+            document.getElementById('status').textContent = status;
 
-      labels.push(timestamp);
-      tempData.push(temp);
-      humidityData.push(humidity);
-
-      if (labels.length > 20) {
-        labels.shift();
-        tempData.shift();
-        humidityData.shift();
-      }
-
-      sensorChart.update();
-    }
-
-    setInterval(() => {
-      fetch("http://localhost:5000/sensor")
-        .then(res => res.json())
-        .then(data => {
-          if (data.temperature && data.humidity) {
-            updateDashboard(data.temperature, data.humidity);
-          }
-        })
-        .catch(err => {
-          console.log("Waiting for data...");
-        });
-    }, 2000);
-  </script>
+            const alertBox = document.getElementById('alertBox');
+            if (alerts.length > 0) {
+                alertBox.style.display = 'block';
+                alertBox.innerHTML = alerts.map(msg => `• ${msg}`).join('<br>');
+                if (shouldPlaySound) document.getElementById('alertAudio').play();
+            } else {
+                alertBox.style.display = 'none';
+                alertBox.innerHTML = '';
+            }
+        }, 2000);
+    </script>
 </body>
 </html>
